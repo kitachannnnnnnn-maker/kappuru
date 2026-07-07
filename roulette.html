@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>おきなわ、何食べる？</title>
+    <!-- ⚡️ Supabaseの公式ライブラリを読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* 極限まで淡くしたミルキーなパステルグラデーション */
         body {
@@ -239,18 +241,54 @@
 </div>
 
 <script>
-    // サンプルデータ
-    const defaultShops = [
-        { name: "首里そば", area: "南部", time: "昼", genre: "麺", status: "行った", isChain: false },
-        { name: "A&W（エンダー）", area: "中部", time: "夜", genre: "パン・軽食", status: "行った", isChain: true },
-        { name: "マクドナルド", area: "南部", time: "夜", genre: "パン・軽食", status: "行った", isChain: true },
-        { name: "すき家", area: "中部", time: "夜", genre: "ごはん", status: "行った", isChain: true },
-        { name: "キャプテンカンガルー", area: "北部", time: "昼", genre: "パン・軽食", status: "行きたい", isChain: false }
-    ];
+    // ⚡️ Supabaseの初期化設定
+    const SUPABASE_URL = "https://lunmckpbtdcdlrcvhrog.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Ft2zusAtDbD4UrjXGuhUsQ_xoS5vEqy";
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let gourmetDatabase = JSON.parse(localStorage.getItem('gourmetDatabase4')) || defaultShops;
+    let gourmetDatabase = [];
 
-    function saveToStorage() { localStorage.setItem('gourmetDatabase4', JSON.stringify(gourmetDatabase)); }
+    // ⚡️ 初期データの読み込みとリアルタイム同期の設定
+    async function initApp() {
+        await fetchShops(); // 最初にデータを全取得
+        renderShopList();
+
+        // ⚡️ リアルタイム同期の開始（誰かが追加・削除・更新したら一瞬で画面が変わる）
+        _supabase
+            .channel('public:okinawa_places')
+            .on('postgres_changes', { event: '*', pattern: 'public', table: 'okinawa_places' }, async () => {
+                await fetchShops();
+                renderShopList();
+            })
+            .subscribe();
+    }
+
+    // ⚡️ データベースから最新のリストを取得する関数
+    async function fetchShops() {
+        const { data, error } = await _supabase
+            .from('okinawa_places')
+            .select('*')
+            .order('created_at', { ascending: true });
+        
+        if (error) {
+            console.error("データ取得エラー:", error);
+            return;
+        }
+
+        // Supabaseの「notes」に入っているJSON（中身のデータ）を復元
+        gourmetDatabase = data.map(item => {
+            const info = JSON.parse(item.notes);
+            return {
+                id: item.id, // 削除や更新に必要
+                name: item.name,
+                area: info.area,
+                time: info.time,
+                genre: info.genre,
+                status: info.status,
+                isChain: info.isChain
+            };
+        });
+    }
 
     function renderShopList() {
         const container = document.getElementById("shop-list-container");
@@ -279,7 +317,8 @@
         });
     }
 
-    function addShop() {
+    // ⚡️ データをSupabaseへ保存する処理
+    async function addShop() {
         const nameInput = document.getElementById("new-shop-name");
         const name = nameInput.value.trim();
         const isChain = document.getElementById("new-shop-is-chain").checked;
@@ -290,30 +329,59 @@
 
         if (!name) { alert("お店の名前を入力してね！"); return; }
 
-        gourmetDatabase.push({ name, area, time, genre, status, isChain });
-        saveToStorage();
-        renderShopList();
+        const extraData = JSON.stringify({ area, time, genre, status, isChain });
+
+        // Supabaseのテーブルへ挿入
+        const { error } = await _supabase
+            .from('okinawa_places')
+            .insert([{ name: name, category: genre, notes: extraData }]);
+
+        if (error) {
+            alert("データの保存に失敗しました…");
+            console.error(error);
+            return;
+        }
 
         nameInput.value = "";
         document.getElementById("new-shop-is-chain").checked = false;
         alert(`「${name}」を追加したよ！`);
     }
 
-    function toggleStatus(index) {
-        if (gourmetDatabase[index].status === "行った") {
-            gourmetDatabase[index].status = "行きたい";
-        } else {
-            gourmetDatabase[index].status = "行った";
+    // ⚡️ ステータス（行った・行きたい）をアップデートする処理
+    async function toggleStatus(index) {
+        const shop = gourmetDatabase[index];
+        const newStatus = shop.status === "行った" ? "行きたい" : "行った";
+        
+        const updatedData = JSON.stringify({
+            area: shop.area,
+            time: shop.time,
+            genre: shop.genre,
+            status: newStatus,
+            isChain: shop.isChain
+        });
+
+        const { error } = await _supabase
+            .from('okinawa_places')
+            .update({ notes: updatedData })
+            .eq('id', shop.id);
+
+        if (error) {
+            console.error("更新エラー:", error);
         }
-        saveToStorage();
-        renderShopList();
     }
 
-    function deleteShop(index) {
-        if (confirm(`「${gourmetDatabase[index].name}」を削除してもいい？`)) {
-            gourmetDatabase.splice(index, 1);
-            saveToStorage();
-            renderShopList();
+    // ⚡️ データを削除する処理
+    async function deleteShop(index) {
+        const shop = gourmetDatabase[index];
+        if (confirm(`「${shop.name}」を削除してもいい？`)) {
+            const { error } = await _supabase
+                .from('okinawa_places')
+                .delete()
+                .eq('id', shop.id);
+
+            if (error) {
+                console.error("削除エラー:", error);
+            }
         }
     }
 
@@ -357,7 +425,8 @@
         }, 70);
     }
 
-    renderShopList();
+    // アプリ起動
+    initApp();
 </script>
 
 </body>
