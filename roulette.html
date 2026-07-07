@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>おきなわ、何食べる？</title>
-    <!-- ⚡️ Supabaseの公式ライブラリを読み込み -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         /* 極限まで淡くしたミルキーなパステルグラデーション */
@@ -94,6 +93,25 @@
         }
         select:focus, input[type="text"]:focus { border-color: #7dd3fc; outline: none; }
 
+        /* 複数選択チェックボックスのスタイル */
+        .checkbox-group {
+            display: flex;
+            gap: 12px;
+            background: white;
+            padding: 10px;
+            border: 2px solid #f1f5f9;
+            border-radius: 15px;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            color: #5c677d;
+            cursor: pointer;
+            margin-bottom: 0;
+        }
+
         /* 結果表示（いちばんマイルドで可愛いグラデーション） */
         .result-box {
             background: linear-gradient(135deg, #f0f9ff 0%, #fff1f2 100%);
@@ -142,7 +160,6 @@
 <div class="container">
     <h1>ふたりの沖縄ごはんルーレット</h1>
     
-    <!-- ⚡️ チェーン店モードスイッチ -->
     <div class="chain-toggle-box">
         <span>🍔 チェーン店だけで選ぶモード</span>
         <label class="switch">
@@ -151,7 +168,6 @@
         </label>
     </div>
 
-    <!-- ルーレット結果 -->
     <div class="result-box">
         <div id="result-name">？？？</div>
         <div id="result-meta">ボタンを押してね</div>
@@ -170,13 +186,12 @@
             </select>
         </div>
         <div class="filter-group">
-            <label>⏰ 時間帯</label>
-            <select id="time-select">
-                <option value="すべて">いつでも</option>
-                <option value="朝">朝</option>
-                <option value="昼">昼</option>
-                <option value="夜">夜</option>
-            </select>
+            <label>⏰ 時間帯（複数えらべる！）</label>
+            <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" id="filter-time-morning" value="朝" checked> 朝</label>
+                <label class="checkbox-label"><input type="checkbox" id="filter-time-lunch" value="昼" checked> 昼</label>
+                <label class="checkbox-label"><input type="checkbox" id="filter-time-dinner" value="夜" checked> 夜</label>
+            </div>
         </div>
         <div class="filter-group">
             <label>🍱 ジャンル</label>
@@ -216,10 +231,12 @@
             </select>
         </div>
         <div class="filter-group">
-            <label>時間帯</label>
-            <select id="new-shop-time">
-                <option value="夜">夜</option><option value="昼">昼</option><option value="朝">朝</option>
-            </select>
+            <label>時間帯（複数えらべる！）</label>
+            <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" id="add-time-morning" value="朝"> 朝</label>
+                <label class="checkbox-label"><input type="checkbox" id="add-time-lunch" value="昼" checked> 昼</label>
+                <label class="checkbox-label"><input type="checkbox" id="add-time-dinner" value="夜" checked> 夜</label>
+            </div>
         </div>
         <div class="filter-group">
             <label>ジャンル</label>
@@ -248,44 +265,55 @@
 
     let gourmetDatabase = [];
 
-    // ⚡️ 初期データの読み込みとリアルタイム同期の設定
+    // アプリ起動時の初期設定
     async function initApp() {
-        await fetchShops(); // 最初にデータを全取得
+        await fetchShops();
         renderShopList();
 
-        // ⚡️ リアルタイム同期の開始（誰かが追加・削除・更新したら一瞬で画面が変わる）
+        // ⚡️ リアルタイム同期の開始
         _supabase
             .channel('public:okinawa_places')
-            .on('postgres_changes', { event: '*', pattern: 'public', table: 'okinawa_places' }, async () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'okinawa_places' }, async () => {
                 await fetchShops();
                 renderShopList();
             })
             .subscribe();
     }
 
-    // ⚡️ データベースから最新のリストを取得する関数
+    // データベースからリストを取得
     async function fetchShops() {
         const { data, error } = await _supabase
             .from('okinawa_places')
             .select('*')
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: false }); // 新しい順に並べる
         
         if (error) {
             console.error("データ取得エラー:", error);
             return;
         }
 
-        // Supabaseの「notes」に入っているJSON（中身のデータ）を復元
         gourmetDatabase = data.map(item => {
-            const info = JSON.parse(item.notes);
+            let info = { area: "南部", time: "昼", genre: "ごはん", status: "行きたい", isChain: false };
+            try {
+                if (item.notes) info = JSON.parse(item.notes);
+            } catch(e) { console.error(e); }
+
+            // 時間帯の古いデータ（文字）を配列に変換してあげる優しさ
+            let timeArray = [];
+            if (Array.isArray(info.time)) {
+                timeArray = info.time;
+            } else if (typeof info.time === 'string') {
+                timeArray = info.time.split(',');
+            }
+
             return {
-                id: item.id, // 削除や更新に必要
+                id: item.id,
                 name: item.name,
-                area: info.area,
-                time: info.time,
-                genre: info.genre,
-                status: info.status,
-                isChain: info.isChain
+                area: info.area || "南部",
+                time: timeArray,
+                genre: info.genre || "ごはん",
+                status: info.status || "行きたい",
+                isChain: !!info.isChain
             };
         });
     }
@@ -294,17 +322,23 @@
         const container = document.getElementById("shop-list-container");
         container.innerHTML = "";
         
+        if (gourmetDatabase.length === 0) {
+            container.innerHTML = "<div style='text-align:center;color:#94a3b8;padding:20px;font-size:14px;'>お店がまだ登録されていません</div>";
+            return;
+        }
+
         gourmetDatabase.forEach((shop, index) => {
             const item = document.createElement("div");
             item.className = "shop-item";
             
             const statusLabel = shop.status === "行った" ? "💖行った" : "📌行きたい";
             const chainBadge = shop.isChain ? " <span style='color:#f59e0b;'>[チェーン]</span>" : "";
+            const timeLabel = shop.time.join('・');
             
             item.innerHTML = `
                 <div class="shop-info">
                     <strong style="color:#4a5568;">${shop.name}</strong>${chainBadge}<br>
-                    <small style="color:#94a3b8; font-weight:bold;">${shop.area} / ${shop.time} / ${shop.genre} / ${statusLabel}</small>
+                    <small style="color:#94a3b8; font-weight:bold;">${shop.area} / ${timeLabel} / ${shop.genre} / ${statusLabel}</small>
                 </div>
                 <div class="shop-buttons">
                     <button onclick="toggleStatus(${index})" class="action-btn btn-status-toggle">
@@ -317,21 +351,26 @@
         });
     }
 
-    // ⚡️ データをSupabaseへ保存する処理
+    // データを保存
     async function addShop() {
         const nameInput = document.getElementById("new-shop-name");
         const name = nameInput.value.trim();
         const isChain = document.getElementById("new-shop-is-chain").checked;
         const area = document.getElementById("new-shop-area").value;
-        const time = document.getElementById("new-shop-time").value;
         const genre = document.getElementById("new-shop-genre").value;
         const status = document.getElementById("new-shop-status").value;
 
+        // 選択された時間帯を配列で取得
+        const selectedTimes = [];
+        if (document.getElementById("add-time-morning").checked) selectedTimes.push("朝");
+        if (document.getElementById("add-time-lunch").checked) selectedTimes.push("昼");
+        if (document.getElementById("add-time-dinner").checked) selectedTimes.push("夜");
+
         if (!name) { alert("お店の名前を入力してね！"); return; }
+        if (selectedTimes.length === 0) { alert("時間帯を1つ以上選んでね！"); return; }
 
-        const extraData = JSON.stringify({ area, time, genre, status, isChain });
+        const extraData = JSON.stringify({ area, time: selectedTimes, genre, status, isChain });
 
-        // Supabaseのテーブルへ挿入
         const { error } = await _supabase
             .from('okinawa_places')
             .insert([{ name: name, category: genre, notes: extraData }]);
@@ -347,7 +386,7 @@
         alert(`「${name}」を追加したよ！`);
     }
 
-    // ⚡️ ステータス（行った・行きたい）をアップデートする処理
+    // ステータス更新
     async function toggleStatus(index) {
         const shop = gourmetDatabase[index];
         const newStatus = shop.status === "行った" ? "行きたい" : "行った";
@@ -365,12 +404,10 @@
             .update({ notes: updatedData })
             .eq('id', shop.id);
 
-        if (error) {
-            console.error("更新エラー:", error);
-        }
+        if (error) console.error("更新エラー:", error);
     }
 
-    // ⚡️ データを削除する処理
+    // 削除処理
     async function deleteShop(index) {
         const shop = gourmetDatabase[index];
         if (confirm(`「${shop.name}」を削除してもいい？`)) {
@@ -379,27 +416,34 @@
                 .delete()
                 .eq('id', shop.id);
 
-            if (error) {
-                console.error("削除エラー:", error);
-            }
+            if (error) console.error("削除エラー:", error);
         }
     }
 
+    // ルーレットを回す
     function spinRoulette() {
         const isChainMode = document.getElementById("chain-mode-toggle").checked;
         const areaFilter = document.getElementById("area-select").value;
-        const timeFilter = document.getElementById("time-select").value;
         const genreFilter = document.getElementById("genre-select").value;
         const statusFilter = document.getElementById("status-select").value;
+
+        // 条件絞り込みの時間帯チェックボックスを取得
+        const activeFilterTimes = [];
+        if (document.getElementById("filter-time-morning").checked) activeFilterTimes.push("朝");
+        if (document.getElementById("filter-time-lunch").checked) activeFilterTimes.push("昼");
+        if (document.getElementById("filter-time-dinner").checked) activeFilterTimes.push("夜");
 
         const filteredList = gourmetDatabase.filter(item => {
             if (isChainMode) {
                 return item.isChain;
             } else {
                 const matchArea = (areaFilter === "すべて" || item.area === areaFilter);
-                const matchTime = (timeFilter === "すべて" || item.time === timeFilter);
                 const matchGenre = (genreFilter === "すべて" || item.genre === genreFilter);
                 const matchStatus = (statusFilter === "すべて" || item.status === statusFilter);
+                
+                // お店の時間帯（配列）のどれか1つでも、チェックされた絞り込み時間帯に含まれているか
+                const matchTime = item.time.some(t => activeFilterTimes.includes(t));
+
                 return matchArea && matchTime && matchGenre && matchStatus && !item.isChain;
             }
         });
