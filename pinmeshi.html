@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ぴん飯きろく</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: "Hiragino Maru Gothic ProN", "Noto Sans JP", "Ubuntu", sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #fff7ed 0%, #fff1f2 100%);
+            background-attachment: fixed;
+            color: #5c677d;
+            padding: 20px 10px;
+            margin: 0;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            max-width: 450px;
+            margin: 0 auto;
+            padding: 25px 20px;
+            border-radius: 30px;
+            box-shadow: 0 10px 30px rgba(254, 215, 170, 0.2);
+            border: 2px solid #ffffff;
+            box-sizing: border-box;
+        }
+        .back-home {
+            display: inline-block;
+            text-decoration: none;
+            color: #f97316;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            background: #fff7ed;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid #ffedd5;
+        }
+        h1 {
+            font-size: 22px;
+            color: #ea580c;
+            margin: 5px 0 20px 0;
+            text-shadow: 1px 1px 0px #fff;
+        }
+        
+        .form-toggle {
+            background: #fff7ed;
+            border: 1px dashed #fdba74;
+            color: #c2410c;
+            padding: 10px;
+            border-radius: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .add-section {
+            display: none;
+            background: #fffafb;
+            padding: 15px;
+            border-radius: 20px;
+            text-align: left;
+            border: 1px solid #ffedd5;
+            margin-bottom: 25px;
+        }
+        .filter-group { margin-bottom: 12px; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #94a3b8; margin-bottom: 6px; }
+        
+        input[type="text"], input[type="date"], select, textarea {
+            width: 100%; padding: 12px; font-size: 15px; border: 2px solid #f1f5f9;
+            border-radius: 15px; background-color: white; box-sizing: border-box;
+            color: #5c677d; font-family: inherit;
+        }
+        textarea { resize: none; height: 70px; }
+        input:focus, select:focus, textarea:focus { border-color: #ffedd5; outline: none; }
+
+        /* 📸 写真選択＆プレビュー用スタイル */
+        .photo-preview-area {
+            width: 100%;
+            height: 150px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background: #f8fafc;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .photo-preview-area img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .photo-hint {
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: bold;
+        }
+
+        .btn-add { 
+            background: linear-gradient(135deg, #fed7aa, #f97316); 
+            padding: 14px; font-size: 16px; margin-top: 10px; 
+            box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2); 
+            border: none; width: 100%; font-weight: bold; border-radius: 30px; color: white; cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-add:active { transform: scale(0.97); }
+        .btn-edit-mode { background: linear-gradient(135deg, #fecdd3, #f43f5e) !important; }
+
+        .timeline { margin-top: 20px; }
+        .meshi-card {
+            background: white;
+            border-radius: 20px;
+            padding: 15px;
+            margin-bottom: 15px;
+            text-align: left;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            border: 1px solid #f8fafc;
+            position: relative;
+            overflow: hidden;
+        }
+        .meshi-date { font-size: 12px; color: #94a3b8; font-weight: bold; }
+        .meshi-title { font-size: 18px; font-weight: bold; color: #475569; margin: 5px 0; }
+        .meshi-stars { color: #fbbf24; font-size: 16px; margin-bottom: 8px; }
+        
+        /* 📸 タイムライン上の写真サイズ */
+        .meshi-photo {
+            width: 100%;
+            max-height: 250px;
+            object-fit: cover;
+            border-radius: 15px;
+            margin: 8px 0;
+            border: 1px solid #f1f5f9;
+        }
+
+        .meshi-comment {
+            font-size: 14px;
+            color: #64748b;
+            background: #fafafa;
+            padding: 8px 12px;
+            border-radius: 10px;
+            margin-top: 5px;
+            word-break: break-all;
+        }
+        .card-actions {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 5px;
+        }
+        .action-mini-btn {
+            border: none;
+            background: rgba(241, 245, 249, 0.8);
+            color: #64748b;
+            padding: 4px 8px;
+            font-size: 11px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-del { background: #fee2e2; color: #ef4444; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <a href="index.html" class="back-home">◀ ホームへ戻る</a>
+    <h1>🍳 ぴん飯きろく</h1>
+
+    <div class="form-toggle" onclick="toggleForm()">✍️ ごはんを記録する（ここをタップ）</div>
+
+    <div class="add-section" id="add-form">
+        <div class="filter-group">
+            <label>作ったごはん・料理名</label>
+            <input type="text" id="dish-name" placeholder="例：ふわとろオムライス">
+        </div>
+        
+        <div class="filter-group">
+            <label>ごはんの写真（タップして選ぶ）</label>
+            <label for="dish-file-input">
+                <div class="photo-preview-area" id="photo-preview">
+                    <span class="photo-hint" id="photo-hint">📸 タップしてカメラ・写真を選択</span>
+                </div>
+            </label>
+            <input type="file" id="dish-file-input" accept="image/*" style="display:none;" onchange="previewDishImage(this)">
+        </div>
+
+        <div class="filter-group">
+            <label>作った日</label>
+            <input type="date" id="dish-date">
+        </div>
+        <div class="filter-group">
+            <label>自己評価・おすすめ度</label>
+            <select id="dish-stars">
+                <option value="5">⭐⭐⭐⭐⭐ (大成功！)</option>
+                <option value="4">⭐⭐⭐⭐ (おいしくできた)</option>
+                <option value="3">⭐⭐⭐ (ふつうに満足)</option>
+                <option value="2">⭐⭐ (ちょっと失敗)</option>
+                <option value="1">⭐ (リベンジしたい)</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>ひと言メモ・感想</label>
+            <textarea id="dish-comment" placeholder="隠し味はハチミツ🍯 / また作ってって言われた！など"></textarea>
+        </div>
+        <button onclick="saveMeshi()" id="submit-btn" class="btn-add">タイムラインに残す</button>
+    </div>
+
+    <div class="timeline" id="timeline-container"></div>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://lunmckpbtdcdlrcvhrog.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Ft2zusAtDbD4UrjXGuhUsQ_xoS5vEqy";
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let meshiDatabase = [];
+    let editId = null;
+    let base64PhotoData = ""; // 写真の一時保存用データ
+
+    function toggleForm() {
+        const form = document.getElementById("add-form");
+        if(form.style.display === "block") {
+            form.style.display = "none";
+            resetForm();
+        } else {
+            form.style.display = "block";
+            if(!document.getElementById("dish-date").value) {
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById("dish-date").value = today;
+            }
+        }
+    }
+
+    // 📸 写真を読み込んで小さく圧縮してプレビューする処理（画質を少し落としてデータ制限を回避します）
+    function previewDishImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 500; // 横幅を最大500pxに制限して軽量化
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 容量を抑えるためにjpegの画質を0.6に圧縮
+                    base64PhotoData = canvas.toDataURL('image/jpeg', 0.6);
+                    
+                    document.getElementById('photo-preview').innerHTML = `<img src="${base64PhotoData}">`;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    async function initApp() {
+        await fetchMeshi();
+        renderTimeline();
+
+        _supabase
+            .channel('public:pin_meshi')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pin_meshi' }, async () => {
+                await fetchMeshi();
+                renderTimeline();
+            })
+            .subscribe();
+    }
+
+    async function fetchMeshi() {
+        const { data, error } = await _supabase
+            .from('pin_meshi')
+            .select('*')
+            .order('date', { ascending: false });
+        
+        if (error) {
+            console.error("データ取得エラー:", error);
+            return;
+        }
+        meshiDatabase = data;
+    }
+
+    function renderTimeline() {
+        const container = document.getElementById("timeline-container");
+        container.innerHTML = "";
+
+        if (meshiDatabase.length === 0) {
+            container.innerHTML = "<div style='text-align:center;color:#94a3b8;padding:30px;font-size:14px;'>まだ思い出のごはんが登録されていません🍳</div>";
+            return;
+        }
+
+        meshiDatabase.forEach((meshi) => {
+            const card = document.createElement("div");
+            card.className = "meshi-card";
+
+            const starString = "⭐".repeat(meshi.stars);
+            const dateParts = meshi.date.split('-');
+            const formattedDate = `${dateParts[0]}年${dateParts[1]}月${dateParts[2]}日`;
+
+            // 💡 コメント欄に写真データをコっそり隠し持って、あれば画像タグを出す
+            let photoHtml = "";
+            if (meshi.comment && meshi.comment.startsWith("data:image")) {
+                const parts = meshi.comment.split("||MEMO||");
+                const imgSrc = parts[0];
+                const textMemo = parts[1] || "";
+                
+                photoHtml = `<img src="${imgSrc}" class="meshi-photo">`;
+                card.innerHTML = `
+                    <div class="meshi-date">📅 ${formattedDate}</div>
+                    <div class="meshi-title">${meshi.dish_name}</div>
+                    <div class="meshi-stars">${starString}</div>
+                    ${photoHtml}
+                    ${textMemo ? `<div class="meshi-comment">${textMemo}</div>` : ''}
+                    <div class="card-actions">
+                        <button onclick="startEdit(${meshi.id})" class="action-mini-btn">編集</button>
+                        <button onclick="deleteMeshi(${meshi.id})" class="action-mini-btn btn-del">削除</button>
+                    </div>
+                `;
+            } else {
+                // 写真がない通常の表示
+                card.innerHTML = `
+                    <div class="meshi-date">📅 ${formattedDate}</div>
+                    <div class="meshi-title">${meshi.dish_name}</div>
+                    <div class="meshi-stars">${starString}</div>
+                    ${meshi.comment ? `<div class="meshi-comment">${meshi.comment}</div>` : ''}
+                    <div class="card-actions">
+                        <button onclick="startEdit(${meshi.id})" class="action-mini-btn">編集</button>
+                        <button onclick="deleteMeshi(${meshi.id})" class="action-mini-btn btn-del">削除</button>
+                    </div>
+                `;
+            }
+            container.appendChild(card);
+        });
+    }
+
+    async function saveMeshi() {
+        const name = document.getElementById("dish-name").value.trim();
+        const date = document.getElementById("dish-date").value;
+        const stars = parseInt(document.getElementById("dish-stars").value);
+        const textMemo = document.getElementById("dish-comment").value.trim();
+
+        if (!name) { alert("料理の名前を入力してね！"); return; }
+        if (!date) { alert("日付を選んでね！"); return; }
+
+        // 💡 写真データがある場合は、コメント欄に「画像データ||MEMO||文字のメモ」という形で合体させて保存する裏技
+        let finalComment = textMemo;
+        if (base64PhotoData) {
+            finalComment = base64PhotoData + "||MEMO||" + textMemo;
+        }
+
+        if (editId === null) {
+            const { error } = await _supabase
+                .from('pin_meshi')
+                .insert([{ dish_name: name, date: date, stars: stars, comment: finalComment }]);
+            if (error) { alert("保存に失敗しちゃいました…"); return; }
+        } else {
+            const { error } = await _supabase
+                .from('pin_meshi')
+                .update({ dish_name: name, date: date, stars: stars, comment: finalComment })
+                .eq('id', editId);
+            if (error) { alert("更新に失敗しちゃいました…"); return; }
+            resetForm();
+        }
+
+        document.getElementById("add-form").style.display = "none";
+    }
+
+    function startEdit(id) {
+        const meshi = meshiDatabase.find(m => m.id === id);
+        if (!meshi) return;
+
+        editId = id;
+        document.getElementById("add-form").style.display = "block";
+        document.getElementById("dish-name").value = meshi.dish_name;
+        document.getElementById("dish-date").value = meshi.date;
+        document.getElementById("dish-stars").value = meshi.stars;
+
+        // 写真とコメントの分離復元
+        if (meshi.comment && meshi.comment.startsWith("data:image")) {
+            const parts = meshi.comment.split("||MEMO||");
+            base64PhotoData = parts[0];
+            document.getElementById('photo-preview').innerHTML = `<img src="${base64PhotoData}">`;
+            document.getElementById("dish-comment").value = parts[1] || "";
+        } else {
+            base64PhotoData = "";
+            document.getElementById('photo-preview').innerHTML = '<span class="photo-hint" id="photo-hint">📸 タップしてカメラ・写真を選択</span>';
+            document.getElementById("dish-comment").value = meshi.comment || "";
+        }
+
+        const submitBtn = document.getElementById("submit-btn");
+        submitBtn.innerText = "変更を保存する";
+        submitBtn.classList.add("btn-edit-mode");
+        
+        document.getElementById("dish-name").focus();
+        document.documentElement.scrollTop = 0;
+    }
+
+    function resetForm() {
+        editId = null;
+        base64PhotoData = "";
+        document.getElementById("dish-name").value = "";
+        document.getElementById("dish-comment").value = "";
+        document.getElementById('photo-preview').innerHTML = '<span class="photo-hint" id="photo-hint">📸 タップしてカメラ・写真を選択</span>';
+        const submitBtn = document.getElementById("submit-btn");
+        submitBtn.innerText = "タイムラインに残す";
+        submitBtn.classList.remove("btn-edit-mode");
+    }
+
+    async function deleteMeshi(id) {
+        const meshi = meshiDatabase.find(m => m.id === id);
+        if (confirm(`「${meshi.dish_name}」の記録を消してもいい？`)) {
+            if (editId === id) resetForm();
+            const { error } = await _supabase
+                .from('pin_meshi')
+                .delete()
+                .eq('id', id);
+            if (error) console.error(error);
+        }
+    }
+
+    initApp();
+</script>
+
+</body>
+</html>
