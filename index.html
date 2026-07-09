@@ -141,6 +141,13 @@
             border-color: #e0f2fe;
         }
 
+        /* 🍳 ぴん飯のボタンカラースタイル */
+        .btn-pinmeshi {
+            background: linear-gradient(135deg, #fff7ed, #ffedd5);
+            color: #ea580c;
+            border-color: #ffedd5;
+        }
+
         .btn-disabled {
             background: #f8fafc;
             color: #94a3b8;
@@ -199,14 +206,24 @@
             <span class="arrow">▶</span>
         </a>
         
-       <a href="map.html" class="menu-btn" style="background: linear-gradient(135deg, #fefcbf, #f0fdf4); color: #854d0e; border-color: #fefcbf;">
-    <span class="menu-icon">🗺️</span>
-    <div class="menu-text">
-        おきなわ思い出マップ
-        <span>行った場所・行きたい場所の記録を満載に！</span>
-    </div>
-    <span class="arrow">▶</span>
-</a>
+        <a href="map.html" class="menu-btn" style="background: linear-gradient(135deg, #fefcbf, #f0fdf4); color: #854d0e; border-color: #fefcbf;">
+            <span class="menu-icon">🗺️</span>
+            <div class="menu-text">
+                おきなわ思い出マップ
+                <span>行った場所・行きたい場所の記録を満載に！</span>
+            </div>
+            <span class="arrow">▶</span>
+        </a>
+
+        <!-- 🍳 新しく追加した「ぴん飯」ボタン -->
+        <a href="pinmeshi.html" class="menu-btn btn-pinmeshi">
+            <span class="menu-icon">🍳</span>
+            <div class="menu-text">
+                ぴん飯きろく
+                <span>彼女の作ってくれたごはんアルバム💖</span>
+            </div>
+            <span class="arrow">▶</span>
+        </a>
          
         <div class="menu-btn btn-disabled">
             <span class="menu-icon">✍️</span>
@@ -220,28 +237,23 @@
 </div>
 
 <script>
-    // 画面が開いたときに、それぞれの携帯に保存されている写真を読み込む
     window.onload = function() {
         showSavedImage('hiroto', '👦🏻');
         showSavedImage('risako', '👧🏻');
     };
 
-    // 写真を選んだときに、画像を読み込んで携帯に保存する魔法の処理
     function previewImage(input, key) {
         if (input.files && input.files[0]) {
             const reader = new FileReader();
             reader.onload = function(e) {
                 const base64Image = e.target.result;
-                // ブラウザのメモリ(LocalStorage)に保存
                 localStorage.setItem('avatar_' + key, base64Image);
-                // 画面上の見た目を更新
                 document.getElementById('view-' + key).innerHTML = `<img src="${base64Image}" alt="${key}">`;
             };
             reader.readAsDataURL(input.files[0]);
         }
     }
 
-    // 保存されている画像を表示する関数
     function showSavedImage(key, defaultEmoji) {
         const savedImage = localStorage.getItem('avatar_' + key);
         if (savedImage) {
