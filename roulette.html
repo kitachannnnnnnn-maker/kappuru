@@ -7,6 +7,7 @@
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>おきなわ、何食べる？</title>
+    <!-- ⚡️ Supabaseライブラリ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
@@ -169,6 +170,7 @@
 
     <h1>ふたりの沖縄ごはんルーレット</h1>
     
+    <!-- ⚡️ 深夜営業モードスイッチ -->
     <div class="midnight-toggle-box">
         <span>🌙 深夜営業の店だけで選ぶモード</span>
         <label class="switch">
@@ -275,7 +277,7 @@
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let gourmetDatabase = [];
-    let editIndex = null; // nullなら新規追加、数値ならそのインデックスのお店を編集
+    let editIndex = null;
 
     async function initApp() {
         await fetchShops();
@@ -362,7 +364,6 @@
         });
     }
 
-    // 追加または編集保存を行うメイン関数
     async function saveShop() {
         const nameInput = document.getElementById("new-shop-name");
         const name = nameInput.value.trim();
@@ -395,12 +396,12 @@
             if (error) { alert("データの保存に失敗しました…"); return; }
             alert(`「${name}」を追加したよ！`);
         } else {
-            // 登録済みの編集保存
+            // 登録済みの編集保存（安全な店名一致に変更）
             const shop = gourmetDatabase[editIndex];
             const { error } = await _supabase
                 .from('okinawa_places')
                 .update({ name: name, category: genre, notes: extraData })
-                .eq('id', shop.id);
+                .eq('name', shop.name);
 
             if (error) { alert("データの更新に失敗しました…"); return; }
             alert(`「${name}」の情報を変更したよ！`);
@@ -408,7 +409,6 @@
         }
 
         nameInput.value = "";
-        // フォームチェックボックスのデフォルト初期化
         document.getElementById("add-area-south").checked = false;
         document.getElementById("add-area-center").checked = true;
         document.getElementById("add-area-north").checked = false;
@@ -418,7 +418,6 @@
         document.getElementById("add-time-midnight").checked = false;
     }
 
-    // 編集モードを開始する
     function startEdit(index) {
         editIndex = index;
         const shop = gourmetDatabase[index];
@@ -427,18 +426,15 @@
         document.getElementById("new-shop-genre").value = shop.genre;
         document.getElementById("new-shop-status").value = shop.status;
 
-        // エリアのチェックボックス再現
         document.getElementById("add-area-south").checked = shop.area.includes("南部");
         document.getElementById("add-area-center").checked = shop.area.includes("中部");
         document.getElementById("add-area-north").checked = shop.area.includes("北部");
 
-        // 時間帯のチェックボックス再現
         document.getElementById("add-time-morning").checked = shop.time.includes("朝");
         document.getElementById("add-time-lunch").checked = shop.time.includes("昼");
         document.getElementById("add-time-dinner").checked = shop.time.includes("夜");
         document.getElementById("add-time-midnight").checked = shop.time.includes("深夜");
 
-        // フォームの見た目を切り替え
         document.getElementById("form-title").innerText = "📝 お店の情報を編集する";
         const submitBtn = document.getElementById("submit-btn");
         submitBtn.innerText = "変更を保存する";
@@ -466,10 +462,11 @@
             status: newStatus
         });
 
+        // 安全な店名一致に変更
         const { error } = await _supabase
             .from('okinawa_places')
             .update({ notes: updatedData })
-            .eq('id', shop.id);
+            .eq('name', shop.name);
 
         if (error) console.error(error);
     }
@@ -478,10 +475,12 @@
         const shop = gourmetDatabase[index];
         if (confirm(`「${shop.name}」を削除してもいい？`)) {
             if (editIndex === index) resetForm();
+            
+            // 安全な店名一致に変更
             const { error } = await _supabase
                 .from('okinawa_places')
                 .delete()
-                .eq('id', shop.id);
+                .eq('name', shop.name);
 
             if (error) console.error(error);
         }
@@ -542,7 +541,6 @@
 
         const filteredList = gourmetDatabase.filter(item => {
             if (isMidnightMode) {
-                // 深夜モードのときは「深夜」が入っているお店を無条件に最優先
                 return item.time.includes("深夜");
             } else {
                 const matchGenre = (genreFilter === "すべて" || item.genre === genreFilter);
