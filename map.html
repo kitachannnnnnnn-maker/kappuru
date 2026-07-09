@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>おきなわ思い出マップ</title>
+    <!-- Supabaseライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
             font-family: "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
@@ -27,57 +29,246 @@
         }
         h1 {
             font-size: 20px;
-            color: #475569;
-            margin-top: 5px;
-            margin-bottom: 20px;
+            color: #854d0e;
+            margin-bottom: 15px;
         }
-        /* 🗺️ 地図をスマホサイズにぴったり合わせる設定 */
+
+        /* ✍️ スポット追加フォーム */
+        .add-form {
+            background: #fefcbf;
+            padding: 15px;
+            border-radius: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+            box-shadow: 0 4px 10px rgba(133, 77, 14, 0.05);
+        }
+        .form-title {
+            font-weight: bold;
+            font-size: 14px;
+            color: #854d0e;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .add-form input, .add-form select {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 10px;
+            border: 1px solid #fef08a;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 13px;
+        }
+        .form-row {
+            display: flex;
+            gap: 8px;
+        }
+        .add-btn {
+            width: 100%;
+            background: #eab308;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .add-btn:active { background: #ca8a04; }
+
+        /* 🗺️ 地図を表示するエリア */
         .map-wrapper {
             position: relative;
             width: 100%;
-            height: 450px;
+            height: 350px;
             border-radius: 20px;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            border: 2px solid #e2e8f0;
-            background: #f8fafc;
+            border: 2px solid #fef08a;
+            margin-bottom: 20px;
         }
         .map-wrapper iframe {
             width: 100%;
             height: 100%;
             border: none;
         }
-        /* ホームに戻るボタン */
+
+        /* 📋 登録されたスポット一覧 */
+        .spot-list {
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            padding: 10px;
+            border-radius: 15px;
+            border: 1px solid #e2e8f0;
+        }
+        .spot-item {
+            padding: 8px;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        .spot-item:last-child { border: none; }
+        .badge {
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+        }
+        .badge-done { background: #f43f5e; } /* 行った：赤 */
+        .badge-yet { background: #0ea5e9; }  /* 行きたい：青 */
+
         .back-btn {
             display: inline-block;
-            margin-top: 20px;
-            padding: 12px 24px;
+            margin-top: 15px;
+            padding: 10px 20px;
             background: white;
             color: #64748b;
             border: 1px solid #cbd5e1;
             border-radius: 15px;
             text-decoration: none;
             font-weight: bold;
-            font-size: 14px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-            transition: background 0.2s;
-        }
-        .back-btn:active {
-            background: #f1f5f9;
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🗺️ おきなわ思い出マップ</h1>
+    <h1>🗺️ ふたりの思い出マップ</h1>
 
+    <!-- 🔍 その場で追加できるフォーム -->
+    <div class="add-form">
+        <div class="form-title">📍 新しい場所を登録する</div>
+        <input type="text" id="spot-name" placeholder="お店や場所の名前（例：国際通りカフェ）">
+        <input type="text" id="spot-address" placeholder="大体の住所やキーワード（例：那覇市、恩納村）">
+        <input type="text" id="spot-memo" placeholder="二人のメモ（例：パンケーキが美味い！）">
+        <div class="form-row">
+            <select id="spot-status">
+                <option value="yet">🌟 行きたい場所</option>
+                <option value="done">❤️ 行った思い出の場所</option>
+            </select>
+            <button onclick="addSpot()" class="add-btn">マップに追加</button>
+        </div>
+    </div>
+
+    <!-- 🗺️ Googleマップの表示（選んだ場所が自動セットされる） -->
     <div class="map-wrapper">
-        <iframe src="https://www.google.co.jp/maps/d/embed?mid=17oAH-ConReUI9onpMt2llT4U7psKVPA&ehbc=2E312F" width="640" height="480"></iframe>
+        <iframe id="google-map" src="https://maps.google.com/maps?output=embed&q=沖縄県&z=10"></iframe>
+    </div>
+
+    <!-- 📜 二人が追加したリスト -->
+    <div class="spot-title" style="text-align:left; font-weight:bold; font-size:14px; margin: 10px 0 5px 5px;">📋 登録したスポット（タップで地図が動くよ）</div>
+    <div class="spot-list" id="spot-container">
+        読み込み中...
     </div>
 
     <a href="index.html" class="back-btn">🏠 ホームに戻る</a>
 </div>
+
+<script>
+    const SUPABASE_URL = "https://lunmckpbtdcdlrcvhrog.supabase.co"; 
+    const SUPABASE_KEY = "sb_publishable_Ft2zusAtDbD4UrjXGuhUsQ_xoS5vEqy";
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    window.onload = function() {
+        loadSpots();
+        setupRealtime();
+    };
+
+    // データを追加する
+    async function addSpot() {
+        const name = document.getElementById("spot-name").value.trim();
+        const address = document.getElementById("spot-address").value.trim();
+        const memo = document.getElementById("spot-memo").value.trim();
+        const status = document.getElementById("spot-status").value;
+
+        if (!name) { alert("場所の名前を入力してね！"); return; }
+
+        const { error } = await _supabase
+            .from('date_maps')
+            .insert([{ name, address: address || name, memo, status }]);
+
+        if (error) {
+            alert("追加に失敗しちゃいました…");
+            console.error(error);
+        } else {
+            // 入力欄をクリア
+            document.getElementById("spot-name").value = "";
+            document.getElementById("spot-address").value = "";
+            document.getElementById("spot-memo").value = "";
+        }
+    }
+
+    // データを読み込む
+    async function loadSpots() {
+        const { data, error } = await _supabase
+            .from('date_maps')
+            .select('*')
+            .order('id', { ascending: false });
+
+        if (error) { console.error(error); return; }
+        renderList(data);
+    }
+
+    // 画面のリストを更新する
+    function renderList(spots) {
+        const container = document.getElementById("spot-container");
+        if (!spots || spots.length === 0) {
+            container.innerHTML = "<div style='color:#94a3b8; font-size:12px;'>まだ登録された場所がありません。上のフォームから追加してみてね！</div>";
+            return;
+        }
+
+        container.innerHTML = "";
+        spots.forEach(spot => {
+            const item = document.createElement("div");
+            item.className = "spot-item";
+            item.style.cursor = "pointer";
+            // クリックしたらその場所に地図をジャンプさせる
+            item.onclick = () => updateMap(spot.address || spot.name);
+
+            const badgeClass = spot.status === 'done' ? 'badge-done' : 'badge-yet';
+            const badgeText = spot.status === 'done' ? '❤️行った' : '🌟行きたい';
+
+            item.innerHTML = `
+                <div>
+                    <strong style="color:#475569;">${spot.name}</strong>
+                    <span style="display:block; font-size:11px; color:#94a3b8;">${spot.memo || 'メモなし'}</span>
+                </div>
+                <span class="badge ${badgeClass}">${badgeText}</span>
+            `;
+            container.appendChild(item);
+        });
+
+        // リストの一番最新の場所をはじめに地図に表示させる
+        if(spots.length > 0) {
+            updateMap(spots[0].address || spots[0].name);
+        }
+    }
+
+    // 地図の表示場所を切り替える
+    function updateMap(location) {
+        const mapIframe = document.getElementById("google-map");
+        // Googleマップの検索埋め込みURLを生成 (z=15はズーム倍率)
+        mapIframe.src = `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(location)}&z=15`;
+    }
+
+    // リアルタイム同期
+    function setupRealtime() {
+        _supabase
+            .channel('public:date_maps')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'date_maps' }, () => {
+                loadSpots();
+            })
+            .subscribe();
+    }
+</script>
 
 </body>
 </html>
