@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>おきなわ思い出マップ (ver 3.0)</title>
-    <!-- Supabaseライブラリ -->
+    <title>おきなわ思い出マップ (ver 3.6)</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
@@ -108,7 +107,7 @@
         /* 📋 登録されたスポット一覧 */
         .spot-list {
             text-align: left;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
             background: white;
             padding: 10px;
@@ -116,7 +115,7 @@
             border: 1px solid #e2e8f0;
         }
         .spot-item {
-            padding: 8px;
+            padding: 10px 8px;
             border-bottom: 1px solid #f1f5f9;
             display: flex;
             justify-content: space-between;
@@ -124,15 +123,41 @@
             font-size: 13px;
         }
         .spot-item:last-child { border: none; }
+        
+        .spot-info {
+            flex-grow: 1;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .action-area {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+        }
+
         .badge {
             padding: 2px 6px;
             border-radius: 6px;
             font-size: 10px;
             font-weight: bold;
             color: white;
+            cursor: pointer;
         }
         .badge-done { background: #f43f5e; } /* 行った：赤 */
         .badge-yet { background: #0ea5e9; }  /* 行きたい：青 */
+
+        .btn-action {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 2px 5px;
+        }
+        .btn-action:hover { color: #eab308; }
+        .btn-delete:hover { color: #f43f5e; }
 
         .back-btn {
             display: inline-block;
@@ -152,9 +177,8 @@
 
 <div class="container">
     <h1>🗺️ ふたりの思い出マップ</h1>
-    <div class="version-badge">ver 3.0</div>
+    <div class="version-badge">ver 3.6</div>
 
-    <!-- 🔍 その場で追加できるフォーム -->
     <div class="add-form">
         <div class="form-title">📍 新しい場所を登録する</div>
         <input type="text" id="spot-name" placeholder="お店や場所の名前（例：国際通りカフェ）">
@@ -169,12 +193,10 @@
         </div>
     </div>
 
-    <!-- 🗺️ Googleマップの表示 -->
     <div class="map-wrapper">
-        <iframe id="google-map" src="https://maps.google.com/maps?output=embed&q=Okinawa&z=10"></iframe>
+        <iframe id="google-map" src="about:blank"></iframe>
     </div>
 
-    <!-- 📜 二人が追加したリスト -->
     <div class="spot-title" style="text-align:left; font-weight:bold; font-size:14px; margin: 10px 0 5px 5px;">📋 登録したスポット（タップで地図が動くよ）</div>
     <div class="spot-list" id="spot-container">
         読み込み中...
@@ -213,6 +235,7 @@
             document.getElementById("spot-name").value = "";
             document.getElementById("spot-address").value = "";
             document.getElementById("spot-memo").value = "";
+            loadSpots();
         }
     }
 
@@ -221,9 +244,12 @@
         const { data, error } = await _supabase
             .from('date_maps')
             .select('*')
-            .order('id', { ascending: false });
+            .order('name', { ascending: true });
 
-        if (error) { console.error(error); return; }
+        if (error) { 
+            console.error("データ読み込み失敗:", error); 
+            return; 
+        }
         renderList(data);
     }
 
@@ -239,18 +265,27 @@
         spots.forEach(spot => {
             const item = document.createElement("div");
             item.className = "spot-item";
-            item.style.cursor = "pointer";
-            item.onclick = () => updateMap(spot.address || spot.name);
 
             const badgeClass = spot.status === 'done' ? 'badge-done' : 'badge-yet';
             const badgeText = spot.status === 'done' ? '❤️行った' : '🌟行きたい';
 
+            // JSの引数でバグが起きないよう安全に文字列をエスケープ処理
+            const safeName = spot.name.replace(/'/g, "\\'");
+            const safeAddress = (spot.address || '').replace(/'/g, "\\'");
+            const safeMemo = (spot.memo || '').replace(/'/g, "\\'");
+
             item.innerHTML = `
-                <div>
+                <div class="spot-info" onclick="updateMap('${safeAddress || safeName}')">
                     <strong style="color:#475569;">${spot.name}</strong>
                     <span style="display:block; font-size:11px; color:#94a3b8;">${spot.memo || 'メモなし'}</span>
                 </div>
-                <span class="badge ${badgeClass}">${badgeText}</span>
+                <div class="action-area">
+                    <span class="badge ${badgeClass}" onclick="toggleStatus('${safeName}', '${spot.status}')" title="タップでステータス変更">${badgeText}</span>
+                    <div>
+                        <button class="btn-action" onclick="editSpot('${safeName}', '${safeAddress}', '${safeMemo}')">✏️ 編集</button>
+                        <button class="btn-action btn-delete" onclick="deleteSpot('${safeName}')">🗑️ 削除</button>
+                    </div>
+                </div>
             `;
             container.appendChild(item);
         });
@@ -260,10 +295,74 @@
         }
     }
 
-    // 地図の表示場所を切り替える
+    // 地図の表示場所を切り替える（Google公式の最も制限が少ない埋め込み形式）
     function updateMap(location) {
         const mapIframe = document.getElementById("google-map");
-        mapIframe.src = `https://maps.google.com/maps?output=embed&q=${encodeURIComponent(location)}&z=15`;
+        mapIframe.src = `https://maps.google.com/maps?q=${encodeURIComponent(location)}&output=embed&z=15`;
+    }
+
+    // 【編集機能】登録情報を書き換える
+    async function editSpot(oldName, currentAddress, currentMemo) {
+        const newName = prompt("新しい「場所の名前」を入力してね：", oldName);
+        if (newName === null) return; // キャンセルされた場合
+        const finalName = newName.trim();
+        if (!finalName) { alert("名前は空っぽにできないよ！"); return; }
+
+        const newAddress = prompt("新しい「住所やキーワード」を入力してね：", currentAddress);
+        if (newAddress === null) return;
+        
+        const newMemo = prompt("新しい「二人のメモ」を入力してね：", currentMemo);
+        if (newMemo === null) return;
+
+        const { error } = await _supabase
+            .from('date_maps')
+            .update({ 
+                name: finalName, 
+                address: newAddress.trim() || finalName, 
+                memo: newMemo.trim() 
+            })
+            .eq('name', oldName);
+
+        if (error) {
+            console.error("編集失敗:", error);
+            alert("編集の保存に失敗しちゃいました…");
+        } else {
+            loadSpots();
+        }
+    }
+
+    // 【ステータス変更】「行った」「行きたい」を切り替える
+    async function toggleStatus(name, currentStatus) {
+        const nextStatus = currentStatus === 'done' ? 'yet' : 'done';
+        
+        const { error } = await _supabase
+            .from('date_maps')
+            .update({ status: nextStatus })
+            .eq('name', name);
+
+        if (error) {
+            console.error("更新失敗:", error);
+            alert("ステータスの変更に失敗しました");
+        } else {
+            loadSpots();
+        }
+    }
+
+    // 【削除機能】データを削除する
+    async function deleteSpot(name) {
+        if (!confirm(`「${name}」を思い出マップから消去してもいい？`)) return;
+
+        const { error } = await _supabase
+            .from('date_maps')
+            .delete()
+            .eq('name', name);
+
+        if (error) {
+            console.error("削除失敗:", error);
+            alert("消去に失敗しました");
+        } else {
+            loadSpots();
+        }
     }
 
     // リアルタイム同期
